@@ -51,6 +51,18 @@ PRIVADA = re.compile(r"^https?://(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)")
 TOKEN_LARGO = re.compile(r"/[A-Fa-f0-9]{24,}/|[A-Fa-f0-9]{32,}")
 CALIDAD = re.compile(r"\((\d{3,4})p\)", re.I)
 
+
+LANG2 = {
+    "spa": "es", "eng": "en", "por": "pt", "deu": "de", "rus": "ru", "hin": "hi",
+    "ara": "ar", "fra": "fr", "ita": "it", "nld": "nl", "swe": "sv", "pol": "pl",
+    "tur": "tr", "zho": "zh", "jpn": "ja", "kor": "ko", "ukr": "uk", "ron": "ro",
+    "ell": "el", "bul": "bg", "ces": "cs", "hun": "hu", "dan": "da", "nor": "nb",
+    "fin": "fi", "heb": "he", "tha": "th", "vie": "vi", "ind": "id", "fil": "tl",
+    "msa": "ms", "urd": "ur", "ben": "bn", "tam": "ta", "swa": "sw", "amh": "am",
+    "cat": "ca", "eus": "eu", "glg": "gl", "sqi": "sq", "pes": "fa", "hrv": "yu",
+    "srp": "yu", "slk": "cs",
+}
+
 REGLAS = [
     ("Deportes", r"deport|sport|futbol|fútbol|espn|dazn|motor|racing|nfl|nba|ufc|golf|tenis|tennis"),
     ("Cine", r"pel[ií]c|movie|cine|film|western"),
@@ -243,6 +255,11 @@ def main(argv):
         lang = LANG_PAIS.get(pais, "")
         cats = info.get("categories") or []
         grupo = grupo_de(c["group"] or (cats[0] if cats else "") or c["name"])
+        # Marca de idioma en el grupo: la app (IPVIO) deduce el idioma del texto de la
+        # categoria, asi que las ajenas llevan el codigo de 2 letras adelante y las
+        # espanolas quedan con el nombre limpio.
+        if lang and lang != "spa" and grupo != "Sin clasificar":
+            grupo = LANG2.get(lang, lang.upper()[:2]) + " · " + grupo
         limpios.append({
             "name": c["name"],
             "g": grupo,
