@@ -1,0 +1,48 @@
+name: actualizar catalogo
+
+on:
+  schedule:
+    # todos los dias 05:10 UTC (02:10 en Uruguay)
+    - cron: "10 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: actualizar
+  cancel-in-progress: false
+
+jobs:
+  construir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Construir catalogo (parseo + sondeo)
+        run: python build.py
+
+      - name: Resumen
+        run: |
+          python - <<'PY'
+          import json, pathlib
+          d = json.loads(pathlib.Path("public/catalog.json").read_text(encoding="utf-8"))
+          print(f"version {d['version']} · {d['count']} canales · {d.get('vivos')} vivos")
+          PY
+
+      - name: Commit si cambio
+        run: |
+          git config user.name "tv-guia-bot"
+          git config user.email "tv-guia-bot@users.noreply.github.com"
+          git add public
+          if git diff --staged --quiet; then
+            echo "sin cambios"
+          else
+            git commit -m "catalogo: $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
