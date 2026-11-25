@@ -24,8 +24,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Construir catalogo (parseo + sondeo)
-        run: python build.py
+      - name: Construir catalogo (base curada + fuentes + sondeo)
+        run: python build.py --base public/catalog.json
 
       - name: Resumen
         run: |

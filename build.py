@@ -198,9 +198,35 @@ def main(argv):
     ap = argparse.ArgumentParser()
     ap.add_argument("--sin-sondeo", action="store_true")
     ap.add_argument("--limite-sondeo", type=int, default=0)
+    ap.add_argument("--base", default="",
+                    help="catalogo propio (channels.json) o public/catalog.json para partir de ahi")
+    ap.add_argument("--status", default="", help="status.json con el ok por URL ya medido")
     a = ap.parse_args(argv)
 
     todos, excluidos = [], Counter()
+
+    # la base va PRIMERO: en el dedupe por nombre gana lo curado a mano (URLs rescatadas)
+    if a.base:
+        ruta = Path(a.base)
+        if ruta.exists():
+            datos = json.loads(ruta.read_text(encoding="utf-8"))
+            lote = datos.get("channels") or []
+            print(f".. {'base':12} {len(lote):5} canales ({ruta.name})")
+            for c in lote:
+                if not c.get("url"):
+                    continue
+                todos.append({
+                    "id": c.get("id") or "",
+                    "name": c.get("name") or "",
+                    "logo": c.get("logo") or "",
+                    "group": c.get("g") or c.get("group") or "",
+                    "url": c["url"],
+                    "pais_base": (c.get("c") or "").upper(),
+                    "origen": "base",
+                })
+        else:
+            print(f"!! base: no existe {ruta}")
+
     for etiqueta, url in FUENTES:
         try:
             texto = bajar(url)
@@ -251,7 +277,7 @@ def main(argv):
             continue
         base_id = (c["id"] or "").split("@")[0].lower()
         info = meta.get(base_id, {})
-        pais = (info.get("country") or pais_de(c["id"]) or "").upper()
+        pais = (c.get("pais_base") or info.get("country") or pais_de(c["id"]) or "").upper()
         lang = LANG_PAIS.get(pais, "")
         cats = info.get("categories") or []
         grupo = grupo_de(c["group"] or (cats[0] if cats else "") or c["name"])
@@ -274,19 +300,29 @@ def main(argv):
         print(f"  excluidos {v:>5}  {k}")
 
     # sondeo
+    previos = {}
+    if a.status:
+        ruta_status = Path(a.status)
+        if ruta_status.exists():
+            medido = json.loads(ruta_status.read_text(encoding="utf-8"))
+            previos = {u: v.get("ok") for u, v in (medido.get("channels") or {}).items()}
+            print(f".. status      {len(previos):5} URLs con resultado previo ({ruta_status.name})")
     for c in limpios:
-        c["ok"] = None   # None = desconocido; el sondeo lo pasa a true/false
+        c["ok"] = previos.get(c["url"])   # None = desconocido
     if a.sin_sondeo:
         print("sondeo: salteado")
     else:
-        objetivo = limpios[: a.limite_sondeo] if a.limite_sondeo else limpios
-        print(f"sondeando {len(objetivo)} URLs...", flush=True)
-        with ThreadPoolExecutor(max_workers=48) as ex:
-            resultados = list(ex.map(lambda c: probar(c["url"]), objetivo))
-        for c, ok in zip(objetivo, resultados):
-            c["ok"] = ok
-        vivos = sum(1 for c in objetivo if c["ok"])
-        print(f"  vivos: {vivos}/{len(objetivo)}")
+        pendientes = [c for c in limpios if c["ok"] is None]
+        if a.limite_sondeo:
+            pendientes = pendientes[: a.limite_sondeo]
+        print(f"sondeando {len(pendientes)} URLs (de {len(limpios)})...", flush=True)
+        if pendientes:
+            with ThreadPoolExecutor(max_workers=48) as ex:
+                resultados = list(ex.map(lambda c: probar(c["url"]), pendientes))
+            for c, ok in zip(pendientes, resultados):
+                c["ok"] = ok
+        vivos = sum(1 for c in limpios if c["ok"] is True)
+        print(f"  vivos: {vivos}/{len(limpios)}")
 
     # orden: vivos primero, luego grupo, luego nombre
     limpios.sort(key=lambda c: (c["ok"] is not True, c["g"], c["name"].lower()))

@@ -2,3 +2,7 @@
 *.pyc
 .env
 
+
+build.log
+build.err
+
